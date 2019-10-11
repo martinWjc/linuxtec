@@ -1,0 +1,97 @@
+SaltStack syndic部署
+
+	当minion过多时，所有的minion都要联系master索取配置，此时会造成master负载过大、效率降低；此时可在master和minion间引入代理，master向不同的代理传输指令，由代理将指令分发到不同的minion上执行，minion执行完毕后将结果给返回代理，再由代理将结果返回给master。 
+	syndic就是用于实现saltstack代理的功能
+
+	
+	
+salt syndic代理部署 
+
+1、在master上删除所有minion证书 
+
+[root@salt-master ~]# salt-key -D -y
+
+[root@salt-master ~]# salt-key -L
+Accepted Keys:
+Denied Keys:
+Unaccepted Keys:
+Rejected Keys:
+
+
+2、安装部署salt syndic 
+
+[root@salt-syndic ~]# yum install -y salt-syndic
+
+[root@salt-syndic ~]# vim /etc/salt/master 
+
+order_masters: True
+syndic_master: 192.168.122.58
+
+[root@salt-syndic ~]# systemctl start salt-master salt-syndic
+[root@salt-syndic ~]# systemctl enable salt-master salt-syndic
+
+[root@salt-syndic ~]# netstat -antp | grep python
+tcp        0      0 0.0.0.0:4505            0.0.0.0:*               LISTEN      10811/python        
+tcp        0      0 0.0.0.0:4506            0.0.0.0:*               LISTEN      10825/python     
+	
+	
+	
+3、在minion端删除旧master的证书信息 ，配置minon向代理发送证书申请 
+
+[root@node01 salt]# rm -rf /etc/salt/pki/
+	
+[root@node01 salt]# vim /etc/salt/minion
+
+	
+	master: 192.168.122.100
+	
+[root@node01 salt]# systemctl restart salt-minion.service 
+
+	
+4、在master端签署代理的证书
+
+5、在代理端签署minon的证书 
+
+
+6、测试 
+
+[root@salt-master ~]# salt '*' cmd.run hostname
+192.168.122.224:
+    node01.linux.com
+192.168.122.19:
+    node02.linux.com
+	
+	
+
+注意：
+
+	syndic默认只能转发指令, 不能转发状态文件 
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	

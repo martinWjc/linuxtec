@@ -1,0 +1,162 @@
+自动化运维工具 
+
+	puppet, saltstack, ansible 
+	
+	作用：实现服务器批量管控
+	
+	
+saltstack应用 
+
+	基于python开发工具, 借助zeroMQ消息队列完成内部通信 
+
+	特性：
+		1、分为两种角色，管理端称为salt-master, 被管理端称为salt-minion 
+		2、支持多种功能模块
+		3、支持分布式部署，通过sal-syndic实现；重量级工具
+		4、以证书的方式实现认证
+		5、支持丰富API接口
+		
+
+
+saltstack安装部署
+
+	防火墙、SELinux、时间同步、主机名 
+
+	两种方式：
+	
+		1、在线安装 	epel-release
+		
+			master: # yum install -y salt-master 
+			minion: # yum install -y salt-minion 
+		
+		2、离线安装
+		
+			master:
+				
+				[root@salt-master ~]# yum install -y salt-master 
+				[root@salt-master ~]# systemctl start salt-master
+				[root@salt-master ~]# systemctl enable salt-master
+					
+				[root@salt-master ~]# netstat -antp | grep python
+				tcp        0      0 0.0.0.0:4505            0.0.0.0:*               LISTEN      1162/python         
+				tcp        0      0 0.0.0.0:4506            0.0.0.0:*               LISTEN      1170/python   
+
+				
+				
+			minion:
+			
+				[root@node01 ~]# yum install -y salt-minion
+ 
+				[root@node01 ~]# vim /etc/salt/minion 
+
+					master: 192.168.122.58
+					id: 192.168.122.224
+
+				[root@node01 ~]# systemctl start salt-minion.service 
+				[root@node01 ~]# systemctl enable salt-minion.service
+
+
+			在master端接收minion的证书申请 
+			
+			1、查看证书 
+			
+			[root@salt-master ~]# salt-key -L
+			Accepted Keys:
+			Denied Keys:
+			Unaccepted Keys:
+			192.168.122.19
+			192.168.122.224
+			Rejected Keys:
+
+			2、签署证书
+			[root@salt-master ~]# salt-key -A -y 
+
+			The following keys are going to be accepted:
+			Unaccepted Keys:
+			192.168.122.19
+			192.168.122.224
+			Key for minion 192.168.122.19 accepted.
+			Key for minion 192.168.122.224 accepted.
+			
+			[root@salt-master ~]# salt-key -L
+			Accepted Keys:
+			192.168.122.19
+			192.168.122.224
+			Denied Keys:
+			Unaccepted Keys:
+			Rejected Keys:
+
+
+			3、测试通信 
+			
+			[root@salt-master ~]# salt '*' test.ping
+			192.168.122.224:
+				True
+			192.168.122.19:
+				True
+
+
+
+salt-key命令的使用
+
+	作用：管理证书 
+	
+	选项：
+	
+		-L 	查看证书 
+		
+		-A 	签署所有minion的证书 
+		-a  签署指定minion的证书 		
+			
+			# salt-key -a minion_id
+		
+		-D 	删除所有minion的证书 
+		-d 	删除指定minion的证书 
+		
+			# salt-key -d minion_id
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

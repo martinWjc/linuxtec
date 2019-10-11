@@ -1,0 +1,1014 @@
+saltstack管理操作 
+
+
+salt命令使用
+
+	Usage: salt [options] '<target>' <function> [arguments]
+
+	salt支持多种匹配minion的写法：
+	
+	1) -E 支持正则表达式 
+	
+		[root@salt-master ~]# salt -E '^192' test.ping
+
+	
+	2) -L 以列表的方式匹配主机 【多个主机】
+	
+		[root@salt-master ~]# salt '192.168.122.19' test.ping
+
+	
+		[root@salt-master ~]# salt -L '192.168.122.19,192.168.122.224' test.ping
+
+
+	3) -S  以网段的方式匹配主机
+	
+		[root@salt-master ~]# salt -S '192.168.122.0/24' test.ping
+
+		
+	4) -C  以复合条件的方式匹配主机   and, or 
+	
+		[root@salt-master ~]# salt -C 'L@192.168.122.19 and S@192.168.122.0/24' test.ping
+
+		[root@salt-master ~]# salt -C 'L@192.168.122.19 or S@192.168.122.0/24' test.ping
+
+
+
+
+Module组件的使用 
+
+	module, 模块 
+	
+1、查看所有模块 
+
+[root@salt-master ~]# salt '192.168.122.19' sys.list_modules
+	
+2、查看模块支持的方法
+
+[root@salt-master ~]# salt '192.168.122.19' sys.list_functions user
+
+3、查看模块方法的帮助
+
+[root@salt-master ~]# salt '192.168.122.19' sys.doc user.add
+
+
+
+模块应用示例：
+
+1、执行命令		cmd.run 
+
+[root@salt-master ~]# salt '*' cmd.run "free -m"
+[root@salt-master ~]# salt '*' cmd.run "rpm -q dhcp"
+
+
+2、管理软件模块 		pkg 
+
+	- pkg.install
+	- pkg.remove
+	- pkg.upgrade
+
+	
+[root@salt-master ~]# salt '*' pkg.install dhcp
+
+[root@salt-master ~]# salt-cp '*' /etc/yum.repos.d/zabbix.repo /etc/yum.repos.d/zabbix.repo
+[root@salt-master ~]# salt '*' pkg.install 'zabbix-agent'
+
+[root@salt-master ~]# salt '*' pkg.upgrade zabbix-agent
+
+
+3、服务管理模块 		service 
+
+	
+    - service.disable
+    - service.disabled
+	
+    - service.enable
+    - service.enabled
+	
+    - service.reload
+    - service.restart
+
+    - service.start
+    - service.status
+    - service.stop
+
+
+
+[root@salt-master ~]# salt '*' service.start vsftpd
+192.168.122.224:
+    True
+192.168.122.19:
+    True
+[root@salt-master ~]# salt '*' service.status vsftpd
+192.168.122.224:
+    True
+192.168.122.19:
+    True
+[root@salt-master ~]# salt '*' cmd.run 'netstat -antp | grep ftp'
+192.168.122.224:
+    tcp6       0      0 :::21                   :::*                    LISTEN      11177/vsftpd
+192.168.122.19:
+    tcp6       0      0 :::21                   :::*                    LISTEN      11368/vsftpd
+
+
+
+4、用户管理模块  	user 
+
+    - user.add
+    - user.chgid
+    - user.chgroups
+    - user.chhome
+    - user.chhomephone
+  
+    - user.chshell
+    - user.chuid
+    
+    - user.delete
+   
+    - user.info
+    - user.rename
+
+
+5、用户组管理模块 
+
+    - group.add
+    - group.adduser
+	
+    - group.chgid
+	
+    - group.delete
+    - group.deluser  
+	
+    - group.info
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+Grains组件 
+
+	数据组件, 保存minion端的状态数据(操作系统类型、版本、IP)
+	
+	由minion首次启动时搜集本身的状态数据，通过网络发送给master
+	
+	数据以键值对进行保存
+
+	
+1、查看所有grains数据 
+
+[root@salt-master ~]# salt '192.168.122.19' grains.items
+
+
+2、利用grains数据匹配主机 
+
+[root@salt-master ~]# salt -G "os:CentOS" test.ping
+
+
+grains其他操作：
+
+1、查看单个grains值 
+
+[root@salt-master ~]# salt '192.168.122.19' grains.get os
+192.168.122.19:
+    CentOS
+	
+[root@salt-master ~]# salt '192.168.122.19' grains.item os
+192.168.122.19:
+    ----------
+    os:
+        CentOS
+
+		
+2、自定义grains数据
+
+1) 在minion端自定义grains数据 
+
+[root@node01 salt]# cat /etc/salt/minion.d/grains.conf 
+grains:
+   role:
+     - webserver
+     - phpserver
+   cab: 17
+
+[root@node01 salt]# systemctl restart salt-minion
+   
+在master端测试获取数据 
+
+[root@salt-master ~]# salt '192.168.122.224' grains.item role
+192.168.122.224:
+    ----------
+    role:
+        - webserver
+        - phpserver
+[root@salt-master ~]# salt '192.168.122.224' grains.item cab
+192.168.122.224:
+    ----------
+    cab:
+        17
+[root@salt-master ~]# salt -G 'cab:17' test.ping
+192.168.122.224:
+    True
+
+
+2) 在master端通过grains模块自定义数据 
+
+[root@salt-master ~]# salt '192.168.122.19' grains.append role db_server
+192.168.122.19:
+    ----------
+    role:
+        - db_server
+[root@salt-master ~]# salt '192.168.122.19' grains.item role
+192.168.122.19:
+    ----------
+    role:
+        - db_server
+[root@salt-master ~]# salt -G 'role:db_server' test.ping
+192.168.122.19:
+    True
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+Pillar组件 
+
+	数据组件， 以键值对的方式保存数据 
+	
+	需要事先在master端定义, 推送给minion
+	
+ 
+通过编写状态文件(*.sls)定义pillar数据
+
+遵循yaml语法：
+
+	1、键: 值， 冒号后面要有空格
+	2、一个键对应多个值 
+	
+		键:
+			- 值 
+			- 值 
+			- 值 
+	3、同级要有相同的缩进，一般建议4个空格 
+	
+	
+编写状态文件的流程：
+
+	1、定义状态文件保存的环境 
+	
+		环境本质就是目录 
+		默认环境名称为base 
+		
+		
+	2、在对应的环境下编写状态文件 
+	
+	
+示例：通过pillar sls文件定义pillar数据 
+
+
+1、定义存放pillar sls文件的环境 
+
+[root@salt-master ~]# vim /etc/salt/master 
+
+pillar_roots:
+  base:
+    - /srv/pillar
+
+[root@salt-master ~]# systemctl restart salt-master
+[root@salt-master ~]# mkdir /srv/pillar
+
+
+2、在base环境定义pillar sls状态文件 
+
+[root@salt-master pillar]# cat test1.sls 
+software: nginx
+version: 1.13
+
+
+3、定义top.sls文件, 定义pillar数据的分配  
+
+[root@salt-master pillar]# cat top.sls 
+base:
+   '*':
+      - test1
+
+
+4、推送pillar数据 
+
+[root@salt-master pillar]# salt '*' saltutil.pillar_refresh
+
+[root@salt-master ~]# salt '*' pillar.items
+
+[root@salt-master ~]# salt -I 'software:nginx' test.ping
+
+
+
+定义pillar sls状态文件的另外一种写法
+
+[root@salt-master pillar]# ls
+test1.sls  test2  top.sls
+[root@salt-master pillar]# cat top.sls 
+base:
+   '*':
+      - test1			//可以代表对应环境目录下的test1.sls 
+      - test2			//可以代表对应环境目录下的test2子目录, 子目录中定义init.sls文件 
+[root@salt-master pillar]# cat test2/init.sls 
+username: admin
+
+
+[root@salt-master pillar]# salt '*' saltutil.pillar_refresh
+192.168.122.224:
+    True
+192.168.122.19:
+    True
+[root@salt-master pillar]# salt '*' pillar.items
+192.168.122.224:
+    ----------
+    software:
+        nginx
+    username:
+        admin
+    version:
+        1.13
+192.168.122.19:
+    ----------
+    software:
+        nginx
+    username:
+        admin
+    version:
+        1.13
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+state组件 
+
+	以sls状态文件, 方便重复利用 
+	
+	遵循yaml语法
+	定义sls状态文件保存的环境 
+	默认环境名称为base
+	
+	
+1、查看state组件的所有模块 
+
+[root@salt-master ~]# salt '192.168.122.19' sys.list_state_modules
+
+
+2、查看模块的方法 
+
+[root@salt-master ~]# salt '192.168.122.19' sys.list_state_functions service
+
+
+3、查看方法的帮助信息 
+
+[root@salt-master ~]# salt '192.168.122.19' sys.state_doc service.running
+
+
+
+sls状态文件大体格式：
+
+任务名称:
+    方法名称:
+		- 参数1
+		- 参数2
+		- 参数3
+	方法名称:
+		- 参数1
+		- 参数2
+		- 参数3
+
+
+
+
+1、定义存放sls状态文件的环境 
+
+file_roots:
+  base:
+    - /srv/salt
+  dev:
+    - /srv/salt/dev
+
+
+file.managed  用于批量复制管理配置文件 
+
+1) 拷贝文件 
+
+copy file:
+  file.managed:
+      - name: /tmp/foo.conf
+      - source: salt://foo.conf
+      - user: root
+      - group: root
+      - mode: 600
+
+
+salt:// 代表sls状态文件所在环境对应的目录 
+
+copy httpd config file:
+    file.managed:
+       - name: /tmp/httpd.conf
+       - source: salt://files/httpd.conf
+
+
+2) 拷贝文件
+
+[root@salt-master salt]# cat test3.sls 
+/tmp/my.cnf:
+   file.managed:
+      - source: salt://files/my.cnf
+
+
+
+执行sls状态文件的两种方法：
+
+	1) 通过state.sls指定状态文件名称 
+	
+		# salt '*' state.sls 状态文件名称
+		
+	2) 通过top.sls入口文件执行 
+	
+		# salt '*' state.highstate
+	
+		[root@salt-master salt]# cat test4.sls 
+		copy world file:
+			file.managed:
+			  - source: salt://files/world.txt
+			  - name: /tmp/world.txt
+
+		[root@salt-master salt]# cat top.sls 
+		base:
+		  '*':
+			 - test4
+
+	3) 在top.sls文件中对不同的主机执行不同的操作 
+	
+	[root@salt-master salt]# cat top.sls 
+	base:
+	  '192.168.122.19':
+		 - test1
+	  '192.168.122.224':
+		 - test2
+
+
+3) 安装ftp服务
+
+[root@salt-master salt]# cat ftp.sls 
+install ftp software:
+    pkg.installed:
+       - name: vsftpd
+
+start ftp daemon:
+    service.running:
+       - name: vsftpd
+       - enable: True
+
+
+
+
+示例：编写sls状态文件，实现lamp平台部署 
+
+[root@salt-master salt]# tree /srv/salt/dev/
+/srv/salt/dev/
+├── files
+│   ├── httpd.conf
+│   ├── my.cnf
+│   ├── test1.php
+│   └── test2.php
+└── lamp.sls
+
+
+[root@salt-master salt]# cat /srv/salt/dev/lamp.sls 
+install lamp software:
+      pkg.installed:
+          - names:
+             - httpd
+             - php
+             - gd
+             - php-gd
+             - php-mysql
+             - mariadb-server
+
+copy httpd config file:
+      file.managed:
+          - source: salt://files/httpd.conf
+          - name: /etc/httpd/conf/httpd.conf
+
+copy mysql config file:
+      file.managed:
+          - source: salt://files/my.cnf
+          - name: /etc/my.cnf
+
+copy php test page:
+      file.managed:
+           - source: salt://files/test1.php 
+           - name: /var/www/html/test1.php
+
+copy php test page2:
+      file.managed:
+           - source: salt://files/test2.php 
+           - name: /var/www/html/test2.php
+
+
+start httpd daemon:
+      service.running:
+          - name: httpd
+          - enable: True
+
+start mysql daemon:
+      service.running:
+          - name: mariadb
+          - enable: True
+
+
+
+
+[root@salt-master dev]# salt '*' state.sls lamp env=dev
+
+
+
+示例：编写sls状态文件，实现安装部署nginx；并实现服务开机自启动 
+
+cmd.run:
+	- cwd: 目录名称 
+	- name：命令1 && 命令2 && 命令3
+
+
+	./configure --prefix=/usr/local/nginx --user=nginx --group=nginx 
+
+
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+资源的依赖关系 
+
+1、unless
+
+	适用于cmd.run
+	
+	unless指定的命令返回False时，name后指定的命令才会执行 
+	
+	cmd.run 
+		- name:
+		- cwd:  
+		- unless: shell命令 
+
+
+2、定义资源的依赖关系
+
+	require		我依赖谁
+	require_in	我被谁依赖
+	
+	
+	- require:  
+		- 模块名称: 任务名称  
+		- 模块名称: 任务名称  
+
+start httpd daemon:
+      service.running:
+          - name: httpd
+          - enable: True
+          - require:
+               - pkg: install lamp software
+               - file: copy httpd config file
+			   
+			   
+3、定义资源的关注关系 
+
+	推送配置文件时，自动重启服务 
+
+	watch		我关注谁 
+	watch_in	我被谁关注 
+
+		
+copy httpd file:
+    file.managed:
+        - name: /etc/httpd/conf/httpd.conf
+        - source: salt://files/httpd.conf
+
+start httpd daemon:
+    service.running:
+         - name: httpd
+         - enable: True
+         - reload: True
+         - watch:
+           - file: copy httpd file
+
+
+
+===============================================top.sls匹配主机写法========================================================
+测试的操作：
+
+test_action:
+   cmd.run:
+     - name: hostname
+
+
+
+1、通过Grains值匹配主机
+
+写法1)
+
+[root@salt-master salt]# cat top.sls 
+base:
+  'G@os:CentOS':
+    - test
+
+
+写法2)
+
+[root@salt-master salt]# cat top.sls 
+base:
+  'os:CentOS':
+    - match: grain
+    - test
+
+
+2、通过Pillar值匹配主机
+
+
+写法1):
+
+[root@salt-master salt]# cat top.sls 
+base:
+  'I@a:10':
+    - test
+
+
+写法2):
+
+[root@salt-master salt]# cat top.sls 
+base:
+  'a:10':
+    - match: pillar
+    - test
+
+	
+3、通过网段匹配主机
+
+写法1) 
+
+[root@salt-master salt]# cat top.sls 
+base:
+  'S@192.168.122.0/24':
+      - test
+
+	
+写法2)
+
+[root@salt-master salt]# cat top.sls 
+base:
+  '192.168.122.0/24':
+    - match: ipcidr
+    - test
+
+
+4、通过正则表达式匹配主机 
+
+写法1) 
+
+[root@salt-master salt]# cat top.sls 
+base:
+  'E@^node':
+    - test
+
+	
+写法2) 
+
+[root@salt-master salt]# cat top.sls 
+base:
+  '^node':
+    - match: pcre
+    - test
+
+
+5、通过列表匹配主机
+
+写法1) 
+
+[root@salt-master salt]# cat top.sls 
+base:
+  'L@node02.linux.com,agent01.linux.com':
+    - test
+	
+写法2)
+
+[root@salt-master salt]# cat top.sls 
+base:
+  'node02.linux.com,agent01.linux.com':
+    - match: list
+    - test
+
+
+6、复合条件
+
+
+base:
+  'E@^node or I@a:10':
+    - test
+	
+
+7、以正则表达式匹配grains值
+
+   'os:(RedHat|CentOS)':
+        - match: grain_pcre
+        - repos.epel
+		
+		
+		
+================================================================================================================================
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+Jinja模板 
+
+	支持模板文本中使用变量，在sls状态文件为变量赋值; 增加文本的灵活性 
+	
+	使用变量语法: {{ 变量名称 }}
+
+1、在模板文件中定义变量 
+
+Listen {{ http_port }}
+
+2、在状态文件中为变量赋值 
+
+[root@salt-master salt]# cat test6.sls 
+copy httpd file:
+    file.managed:
+        - name: /etc/httpd/conf/httpd.conf
+        - source: salt://files/httpd.conf
+        - template: jinja
+        - defaults:
+             http_port: 2222
+
+
+通过grains为变量赋值
+
+Listen {{ http_ip }}:{{ http_port }}
+
+[root@salt-master ~]# cat /srv/salt/test6.sls 
+copy httpd file:
+    file.managed:
+        - name: /etc/httpd/conf/httpd.conf
+        - source: salt://files/httpd.conf
+        - template: jinja
+        - defaults:
+             http_ip: {{ grains["ipv4"][1] }}
+             http_port: 3333
+
+
+
+示例：统一部署zabbix-agent 
+
+copy zabbix yum repo:
+     file.managed:
+         - name: /etc/yum.repos.d/zabbix34.repo
+         - source: salt://files/zabbix34.repo 
+
+install zabbix-agent:
+      pkg.installed:
+          - name: zabbix-agent
+          - require:
+              - file: copy zabbix yum repo
+
+copy zabbix-agent config file:
+      file.managed:
+            - name: /etc/zabbix/zabbix_agentd.conf
+            - source: salt://files/zabbix_agentd.conf
+            - template: jinja
+            - defaults:
+                server_ip: 1.1.1.1
+                host_name: {{ grains["nodename"] }} 
+            - require:
+                - pkg: install zabbix-agent
+
+
+
+				
+				
+通过pillar为变量赋值
+
+1、定义pillar数据 
+
+[root@salt-master salt]# cat /srv/pillar/http.sls
+ip: {{ grains["ipv4"][1] }}
+port: 4444
+[root@salt-master salt]# cat /srv/pillar/top.sls
+base:
+   '*':
+      - http
+[root@salt-master salt]# salt '*' saltutil.pillar_refresh
+192.168.122.224:
+    True
+192.168.122.19:
+    True
+
+[root@salt-master salt]# salt '*' pillar.items
+192.168.122.19:
+    ----------
+    ip:
+        192.168.122.19
+    port:
+        4444
+192.168.122.224:
+    ----------
+    ip:
+        192.168.122.224
+    port:
+        4444
+
+
+
+2、使用pillar数据为变量赋值
+
+[root@salt-master salt]# cat /srv/salt/test6.sls
+copy httpd file:
+    file.managed:
+        - name: /etc/httpd/conf/httpd.conf
+        - source: salt://files/httpd.conf
+        - template: jinja
+        - defaults:
+             http_ip: {{ pillar["ip"] }}
+             http_port: {{ pillar["port"] }} 
+
+
+
+在定义pillar数据时，支持条件判断 
+
+[root@salt-master pillar]# cat /srv/pillar/http.sls 
+ip: {{ grains["ipv4"][1] }}
+{% if grains["ipv4"][1] == "192.168.122.19" %}
+port: 8888
+{% elif grains["ipv4"][1] == "192.168.122.224" %}
+port: 7777
+{% endif %}
+
+
+ 
+在sls状态文件中使用条件判断 
+
+[root@salt-master salt]# cat /srv/salt/test8.sls 
+install software:
+    pkg.installed:
+       {% if grains["ipv4"][1] == "192.168.122.19" %}
+       - name: samba
+       {% elif grains["ipv4"][1] == "192.168.122.224" %}
+       - name: nfs-utils
+       {% endif %}
+	
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+returner组件 
+
+	支持将saltstack执行结果进行保存, 方便后续审计分析 
+	支持多种方式：
+		syslog, mysql, redis, mongodb
+
+		
+示例：将模块的执行结果保存到系统日志
+
+[root@salt-master ~]# salt '192.168.122.19' cmd.run uptime --return syslog
+192.168.122.19:
+     13:57:22 up  5:14,  1 user,  load average: 0.00, 0.01, 0.05
+
+
+示例：配置将执行结果保存到MySQL数据库 
+
+1、在master安装MySQL
+
+[root@salt-master ~]# yum install -y mariadb-server 
+
+[root@salt-master ~]# systemctl start mariadb
+[root@salt-master ~]# systemctl enable mariadb
+
+
+2、登录数据库，创建saltstack需要的库、表及相应的授权用户 
+
+CREATE DATABASE  `salt`
+  DEFAULT CHARACTER SET utf8
+  DEFAULT COLLATE utf8_general_ci;
+
+USE `salt`;
+
+--
+-- Table structure for table `jids`
+--
+
+DROP TABLE IF EXISTS `jids`;
+CREATE TABLE `jids` (
+  `jid` varchar(255) NOT NULL,
+  `load` mediumtext NOT NULL,
+  UNIQUE KEY `jid` (`jid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+CREATE INDEX jid ON jids(jid) USING BTREE;
+
+--
+-- Table structure for table `salt_returns`
+--
+
+DROP TABLE IF EXISTS `salt_returns`;
+CREATE TABLE `salt_returns` (
+  `fun` varchar(50) NOT NULL,
+  `jid` varchar(255) NOT NULL,
+  `return` mediumtext NOT NULL,
+  `id` varchar(255) NOT NULL,
+  `success` varchar(10) NOT NULL,
+  `full_ret` mediumtext NOT NULL,
+  `alter_time` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY `id` (`id`),
+  KEY `jid` (`jid`),
+  KEY `fun` (`fun`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+--
+-- Table structure for table `salt_events`
+--
+
+DROP TABLE IF EXISTS `salt_events`;
+CREATE TABLE `salt_events` (
+`id` BIGINT NOT NULL AUTO_INCREMENT,
+`tag` varchar(255) NOT NULL,
+`data` mediumtext NOT NULL,
+`alter_time` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+`master_id` varchar(255) NOT NULL,
+PRIMARY KEY (`id`),
+KEY `tag` (`tag`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+
+MariaDB [salt]> grant all on salt.* to 'saltuser'@'salt-master.linux.com' identified by 'redhat';
+Query OK, 0 rows affected (0.00 sec)
+
+MariaDB [salt]> flush privileges;
+
+
+3、在所有主机安装python连接MySQL的驱动 
+
+[root@salt-master ~]# yum install -y MySQL-python 
+
+[root@salt-master ~]# salt '*' pkg.install MySQL-python
+
+
+4、编辑master配置文件，指定数据库的连接信息 
+
+
+[root@salt-master ~]# vim /etc/salt/master 
+
+mysql.host: 'salt-master.linux.com'
+mysql.user: 'saltuser'
+mysql.pass: 'redhat'
+mysql.db: 'salt'
+mysql.port: 3306
+master_job_cache: mysql
+
+[root@salt-master ~]# systemctl restart salt-master
+
+
+--------------------------------------------------------------------------------------------------------------------------------
+
+job管理 
+
+	
+1、结束任务
+[root@salt-master ~]# salt '192.168.122.19' saltutil.signal_job 20191009141554520693 15
+192.168.122.19:
+    Signal 15 sent to job 20191009141554520693 at pid 3601
+	
+2、查看正在运行的job
+[root@salt-master ~]# salt-run jobs.active
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
